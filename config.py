@@ -1,0 +1,20 @@
+import os
+
+GEMINI_API_KEY = "AIzaSyDj21RSpKQfHJoQ6sUHz-I_7K14sbHFTEA"
+
+TELEGRAM_TOKEN = "8617325670:AAFa4O5AuJuvy2FNabyyrxdF3FyZzae40RY"
+
+TELEGRAM_CHAT_ID = "6730614813"
+
+DB_PATH = "market.db"
+
+SYMBOLS = [
+    "BTCUSDT",
+    "DOGEUSDT"
+]
+
+TIMEFRAMES = [
+    "1h",
+    "4h",
+    "1d"
+]
