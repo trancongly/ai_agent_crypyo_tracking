@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import time
 
 from google import genai
 
@@ -27,22 +28,42 @@ status TEXT
 )
 """)
 
+# get snapshots by timeframe
+
+def get_snapshots(symbol):
+    data ={}
+
+    for tf in TIMEFRAMES:
+        cur.execute("""
+        SELECT * 
+        FROM snapshots
+        WHERE symbol=? AND timeframe=?
+        ORDER BY id DESC
+        LIMIT 30
+        """, (symbol, tf))
+
+        rows = cur.fetchall()
+
+        data[tf] = rows
+    return data
+
+#loop
 for symbol in SYMBOLS:
 
-    cur.execute("""
-    SELECT *
-    FROM snapshots
-    WHERE symbol=?
-    ORDER BY id DESC
-    LIMIT 10
-    """,(symbol,))
-
-    rows = cur.fetchall()
+    snapshot_data = get_snapshots(symbol)
 
     prompt = f"""
-Analyze the following crypto market snapshots:
+You are an expert crypto trader using multiple timeframe analysis.
+Market snapshots (group by timeframe):
 
-{rows}
+{json.dumps(snapshot_data, indent=2)}
+
+Instructions:
+- Determine overall trend from 1d timeframe
+- Refine struct using 4h timeframe
+- Predict short-term movement on 1h timeframe
+- Identify nearest resistance and support
+- Do not explain any thing
 
 Return ONLY valid JSON:
 
@@ -94,6 +115,8 @@ Return ONLY valid JSON:
             float(data["resistance"]),
             float(data["support"])
         ))
+
+        time.sleep(60)
 
         print(f"{symbol}: prediction saved")
 

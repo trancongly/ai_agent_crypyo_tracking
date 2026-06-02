@@ -3,10 +3,10 @@ import sqlite3
 from config import *
 from setup_manager import update_setup
 
-update_setup(
-    prediction["setup"],
-    success
-)
+#update_setup(
+#    prediction["setup"],
+#    success
+#)
 
 conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
