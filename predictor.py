@@ -57,33 +57,34 @@ for symbol in SYMBOLS:
     for tf in ["1d", "4h", "1h"]:
         rows = snapshot_data.get(tf, [])
         
-        csv_lines = ["timestamp,rsi,volume,bb_upper,bb_mid,bb_lower"]
+        csv_lines = ["rsi,volume,bb_upper,bb_mid,bb_lower"]
         
         for row in rows:
-            short_ts = row[1].replace("T", " ")[:16]
-            
             rsi      = round(row[5], 2)
             volume   = round(row[6], 2)
-            bb_upper = round(row[7], 2)
-            bb_mid   = round(row[8], 2)
-            bb_lower = round(row[9], 2)
+            bb_upper = round(row[7], 4)
+            bb_mid   = round(row[8], 4)
+            bb_lower = round(row[9], 4)
             
-            line = f"{short_ts},{rsi},{volume},{bb_upper},{bb_mid},{bb_lower}"
+            line = f"{rsi},{volume},{bb_upper},{bb_mid},{bb_lower}"
             csv_lines.append(line)
         
         data_by_tf[tf] = "\n".join(csv_lines)
 
     if snapshot_data.get("1h"):
-        current_price = round(snapshot_data["1h"][0][4], 2)
+        current_price = round(snapshot_data["1h"][0][4], 4)
     else:
         current_price = "Unknown"
 
-    prompt = f"""You are an expert crypto trader. Analyze the following Bollinger band, rsi, volume data in 1d time frame
+    prompt = f"""
+    You are an expert crypto trader. Analyze the following rsi, volume, Bollinger band data in 1d time frame
 {data_by_tf["1d"]}
 4h time frame 
 {data_by_tf["4h"]}
 1h time frame 
 {data_by_tf["1h"]}
+
+Data order is DESC.
 
 Current price is 
 {current_price}
