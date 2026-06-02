@@ -47,46 +47,70 @@ def get_snapshots(symbol):
         data[tf] = rows
     return data
 
-#loop
+
+# loop
 for symbol in SYMBOLS:
 
     snapshot_data = get_snapshots(symbol)
 
-    prompt = f"""
-You are an expert crypto trader using multiple timeframe analysis.
-Market snapshots (group by timeframe):
+    data_by_tf = {}
+    for tf in ["1d", "4h", "1h"]:
+        rows = snapshot_data.get(tf, [])
+        
+        csv_lines = ["timestamp,rsi,volume,bb_upper,bb_mid,bb_lower"]
+        
+        for row in rows:
+            short_ts = row[1].replace("T", " ")[:16]
+            
+            rsi      = round(row[5], 2)
+            volume   = round(row[6], 2)
+            bb_upper = round(row[7], 2)
+            bb_mid   = round(row[8], 2)
+            bb_lower = round(row[9], 2)
+            
+            line = f"{short_ts},{rsi},{volume},{bb_upper},{bb_mid},{bb_lower}"
+            csv_lines.append(line)
+        
+        data_by_tf[tf] = "\n".join(csv_lines)
 
-{json.dumps(snapshot_data, indent=2)}
+    if snapshot_data.get("1h"):
+        current_price = round(snapshot_data["1h"][0][4], 2)
+    else:
+        current_price = "Unknown"
+
+    prompt = f"""You are an expert crypto trader. Analyze the following Bollinger band, rsi, volume data in 1d time frame
+{data_by_tf["1d"]}
+4h time frame 
+{data_by_tf["4h"]}
+1h time frame 
+{data_by_tf["1h"]}
+
+Current price is 
+{current_price}
 
 Instructions:
-- Determine overall trend from 1d timeframe
-- Refine struct using 4h timeframe
-- Predict short-term movement on 1h timeframe
-- Identify nearest resistance and support
-- Do not explain any thing
+- Predict short-term movement direction.
+- Identify the nearest key resistance and support levels.
+
+- Do not explain any thing.
 
 Return ONLY valid JSON:
-
 {{
   "probability": 60,
   "direction": "bullish",
   "resistance": 0,
   "support": 0
-}}
-"""
+}}"""
 
+    print(f"{prompt}")
     try:
-
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt
         )
 
         text = response.text.strip()
-
-        text = text.replace("```json", "")
-        text = text.replace("```", "")
-        text = text.strip()
+        text = text.replace("```json", "").replace("```", "").strip()
 
         data = json.loads(text)
 
@@ -101,15 +125,9 @@ Return ONLY valid JSON:
             support,
             status
         )
-        VALUES(
-            datetime('now'),
-            ?,?,
-            ?,?,?,?,
-            'pending'
-        )
-        """,(
+        VALUES(datetime('now'), ?, '4h', ?, ?, ?, ?, 'pending')
+        """, (
             symbol,
-            "4h",
             float(data["probability"]),
             str(data["direction"]),
             float(data["resistance"]),
@@ -117,7 +135,6 @@ Return ONLY valid JSON:
         ))
 
         time.sleep(60)
-
         print(f"{symbol}: prediction saved")
 
     except Exception as e:
