@@ -33,7 +33,7 @@ def get_data(symbol, interval):
         params={
             "symbol": symbol,
             "interval": interval,
-            "limit": 30
+            "limit": 100
         }
     )
 
@@ -63,7 +63,7 @@ for symbol in SYMBOLS:
         df = get_data(symbol, tf)
 
         bb = ta.bbands(df["close"])
-        rsi = ta.rsi(df["close"])
+        rsi = ta.rsi(df["close"], length=7)
 
         bb_upper_col = next(c for c in bb.columns if c.startswith("BBU_"))
         bb_mid_col   = next(c for c in bb.columns if c.startswith("BBM_"))
