@@ -33,7 +33,7 @@ def get_data(symbol, interval):
         params={
             "symbol": symbol,
             "interval": interval,
-            "limit": 100
+            "limit": 30
         }
     )
 
@@ -55,6 +55,7 @@ def get_data(symbol, interval):
 
     return df
 
+
 for symbol in SYMBOLS:
 
     for tf in TIMEFRAMES:
@@ -64,35 +65,46 @@ for symbol in SYMBOLS:
         bb = ta.bbands(df["close"])
         rsi = ta.rsi(df["close"])
 
-        latest = df.iloc[-1]
         bb_upper_col = next(c for c in bb.columns if c.startswith("BBU_"))
         bb_mid_col   = next(c for c in bb.columns if c.startswith("BBM_"))
         bb_lower_col = next(c for c in bb.columns if c.startswith("BBL_"))
 
-        cur.execute("""
-            INSERT INTO snapshots(
-                timestamp,
-                symbol,
-                timeframe,
-                price,
-                rsi,
-                volume,
-                bb_upper,
-                bb_mid,
-                bb_lower
-            )
-            VALUES(?,?,?,?,?,?,?,?,?)
-            """,(
-                datetime.now(UTC).isoformat(),
-                symbol,
-                tf,
-                float(latest["close"]),
-                float(rsi.iloc[-1]),
-                float(latest["volume"]),
-                float(bb.iloc[-1][bb_upper_col]),
-                float(bb.iloc[-1][bb_mid_col]),
-                float(bb.iloc[-1][bb_lower_col])
-            ))
+        df["rsi"] = rsi
+        df["bb_upper"] = bb[bb_upper_col]
+        df["bb_mid"] = bb[bb_mid_col]
+        df["bb_lower"] = bb[bb_lower_col]
+
+        for index, row in df.iterrows():
+            
+            if pd.isna(row["rsi"]) or pd.isna(row["bb_upper"]):
+                continue
+
+            candle_timestamp = datetime.fromtimestamp(row["time"] / 1000, tz=UTC).isoformat()
+
+            cur.execute("""
+                INSERT INTO snapshots(
+                    timestamp,
+                    symbol,
+                    timeframe,
+                    price,
+                    rsi,
+                    volume,
+                    bb_upper,
+                    bb_mid,
+                    bb_lower
+                )
+                VALUES(?,?,?,?,?,?,?,?,?)
+                """, (
+                    candle_timestamp,
+                    symbol,
+                    tf,
+                    float(row["close"]),
+                    float(row["rsi"]),
+                    float(row["volume"]),
+                    float(row["bb_upper"]),
+                    float(row["bb_mid"]),
+                    float(row["bb_lower"])
+                ))
 
 conn.commit()
 conn.close()
