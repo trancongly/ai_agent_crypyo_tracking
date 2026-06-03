@@ -8,6 +8,8 @@ from config import *
 
 from price_trend_analyzer import calculate_market_structure
 
+from bb_analyzer import BollingerStructureAnalyzer
+
 conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
 
@@ -63,13 +65,23 @@ for symbol in SYMBOLS:
     for tf in TIMEFRAMES:
 
         df = get_data(symbol, tf)
-        features = calculate_market_structure(df)
+
+        rsi = ta.rsi(df["close"], length=6)
+        features = calculate_market_structure(
+    df=df,
+    rsi=rsi,
+    lookback=30
+)
 
         print(features)
 
-        bb = ta.bbands(df["close"])
-        rsi = ta.rsi(df["close"], length=6)
+        analyzer = BollingerStructureAnalyzer()
 
+        result = analyzer.analyze(df.tail(90))
+
+        print(result)
+
+        bb = ta.bbands(df["close"])
         bb_upper_col = next(c for c in bb.columns if c.startswith("BBU_"))
         bb_mid_col   = next(c for c in bb.columns if c.startswith("BBM_"))
         bb_lower_col = next(c for c in bb.columns if c.startswith("BBL_"))
