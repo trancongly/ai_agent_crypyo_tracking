@@ -6,6 +6,8 @@ from datetime import datetime, UTC
 
 from config import *
 
+from price_trend_analyzer import calculate_market_structure
+
 conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
 
@@ -52,7 +54,7 @@ def get_data(symbol, interval):
 
     for c in ["open","high","low","close","volume"]:
         df[c] = df[c].astype(float)
-
+    #print(df)
     return df
 
 
@@ -61,9 +63,12 @@ for symbol in SYMBOLS:
     for tf in TIMEFRAMES:
 
         df = get_data(symbol, tf)
+        features = calculate_market_structure(df)
+
+        print(features)
 
         bb = ta.bbands(df["close"])
-        rsi = ta.rsi(df["close"], length=7)
+        rsi = ta.rsi(df["close"], length=6)
 
         bb_upper_col = next(c for c in bb.columns if c.startswith("BBU_"))
         bb_mid_col   = next(c for c in bb.columns if c.startswith("BBM_"))
