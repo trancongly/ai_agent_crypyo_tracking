@@ -5,8 +5,11 @@ import numpy as np
 import joblib
 
 from google import genai
+from rsi_analyzer import check_rsi_trend
+from rsi_analyzer import PivotState
+from rsi_analyzer import detect_divergence
+from rsi_analyzer import ml_divergence
 
-# Cấu hình mặc định phòng trường hợp thiếu file config.py bên ngoài
 try:
     from config import *
 except ImportError:
@@ -14,105 +17,6 @@ except ImportError:
     DB_PATH = "crypto_data.db"
     TIMEFRAMES = ["1d", "4h", "1h"]
     SYMBOLS = ["BTCUSDT", "ETHUSDT"]
-
-# ==========================================
-# FAST PIVOT
-# ==========================================
-def fast_pivot_low(series):
-    i = len(series) - 3
-    if i < 2:
-        return None
-    v = series[i]
-    if (v < series[i-1] and v < series[i-2] and 
-        v < series[i+1] and v < series[i+2]):
-        return (i, v)
-    return None
-
-def fast_pivot_high(series):
-    i = len(series) - 3
-    if i < 2:
-        return None
-    v = series[i]
-    if (v > series[i-1] and v > series[i-2] and 
-        v > series[i+1] and v > series[i+2]):
-        return (i, v)
-    return None
-
-class PivotState:
-    def __init__(self):
-        self.lows = []
-        self.highs = []
-
-    def update(self, series):
-        pl = fast_pivot_low(series)
-        ph = fast_pivot_high(series)
-
-        if pl:
-            self.lows.append(pl)
-            self.lows = self.lows[-3:]
-
-        if ph:
-            self.highs.append(ph)
-            self.highs = self.highs[-3:]
-
-# ==========================================
-# DIVERGENCE
-# ==========================================
-def detect_divergence(price_state, rsi_state):
-    if len(price_state.lows) >= 2 and len(rsi_state.lows) >= 2:
-        p1, p2 = price_state.lows[-2:]
-        r1, r2 = rsi_state.lows[-2:]
-
-        if p2[1] < p1[1] and r2[1] > r1[1]:
-            return "bullish_divergence"
-        if p2[1] > p1[1] and r2[1] < r1[1]:
-            return "hidden_bullish"
-
-    if len(price_state.highs) >= 2 and len(rsi_state.highs) >= 2:
-        p1, p2 = price_state.highs[-2:]
-        r1, r2 = rsi_state.highs[-2:]
-
-        if p2[1] > p1[1] and r2[1] < r1[1]:
-            return "bearish_divergence"
-        if p2[1] < p1[1] and r2[1] > r1[1]:
-            return "hidden_bearish"
-
-    return "none"
-
-# ==========================================
-# ML MODEL
-# ==========================================
-model = None
-
-try:
-    model = joblib.load("divergence_model.pkl")
-except Exception:
-    model = None
-
-def extract_features(close, rsi):
-    return [
-        close[-1] - close[-3],
-        rsi[-1] - rsi[-3],
-        min(rsi[-5:]),
-        max(rsi[-5:])
-    ]
-
-def ml_divergence(close, rsi):
-    if model is None:
-        return "none"
-    
-    try:
-        feat = extract_features(close, rsi)
-        pred = model.predict([feat])[0]
-
-        mapping = {
-            0: "bullish_divergence",
-            1: "bearish_divergence",
-            2: "none"
-        }
-        return mapping.get(pred, "none")
-    except Exception:
-        return "none"
 
 # ==========================================
 # DATABASE + CLIENT
@@ -125,7 +29,6 @@ except Exception:
 conn = sqlite3.connect(DB_PATH)
 cur = conn.cursor()
 
-# Tự động khởi tạo cấu trúc bảng mẫu nếu DB trống
 cur.execute("""
 CREATE TABLE IF NOT EXISTS snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,6 +74,8 @@ def build_features(rows):
     latest = rows[0]
 
     current_price = float(latest[4])
+    rsi_trend = check_rsi_trend(rsis)
+    print(rsi_trend)
     current_rsi = rsis[0]
 
     rsi_slope_5 = (rsis[0] - rsis[4]) / 5
@@ -202,7 +107,6 @@ def build_features(rows):
     else:
         bb_position = 50
 
-    # Trả về chuỗi định dạng CSV thuần (không kèm tên nhãn lặp lại) để tiết kiệm token
     csv_row = f"{current_rsi:.2f},{rsi_slope_5:.2f},{rsi_slope_10:.2f},{volume_ratio:.2f},{volume_slope_5:.0f},{volume_trend},{bbw:.2f},{bb_position:.0f}"
 
     return {
@@ -222,11 +126,9 @@ for symbol in SYMBOLS:
         for tf in ["1d", "4h", "1h"]:
             data_by_tf[tf] = build_features(snapshot_data.get(tf, []))
 
-        # Kiểm tra xem có bất kỳ dữ liệu nào được build không
         if not data_by_tf["1d"] and not data_by_tf["4h"] and not data_by_tf["1h"]:
             continue
 
-        # Tạo cấu trúc chuỗi bảng dữ liệu CSV gửi kèm prompt
         csv_lines = []
         for tf in ["1d", "4h", "1h"]:
             if data_by_tf[tf]:
@@ -240,7 +142,6 @@ for symbol in SYMBOLS:
         ml_div = "none"
 
         if data_by_tf["1h"]:
-            # Chỉ lấy tối đa dữ liệu hiện có (an toàn nếu mảng dưới 50 nến)
             close = np.array(data_by_tf["1h"]["price"][-50:])
             rsi = np.array(data_by_tf["1h"]["rsi"][-50:])
 
@@ -258,7 +159,6 @@ for symbol in SYMBOLS:
             if snapshot_data.get("1h") and len(snapshot_data["1h"]) > 0 else "Unknown"
         )
 
-        # Prompt đã nén dữ liệu dưới dạng bảng CSV mini cực kỳ tối ưu
         prompt = f"""
 You are an expert crypto trader. Analyze market data for {symbol} (Current Price: {current_price}).
 
