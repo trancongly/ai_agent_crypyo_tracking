@@ -125,9 +125,13 @@ def calculate_market_structure(
 
         "high_price": round(high_price, 8),
         "high_time": high_time,
+        "high_volume": int(high_volume),
+        "high_rsi": round(high_rsi, 2),
 
         "low_price": round(low_price, 8),
         "low_time": low_time,
+        "low_volume": int(low_volume),
+        "low_rsi": round(low_rsi, 2),
 
         "current_close": round(current_close, 8),
 
@@ -155,24 +159,168 @@ def calculate_market_structure(
             round(float(distance_from_low_pct), 2),
 
         # RSI structure
-
-        "high_rsi":
-            round(high_rsi, 2),
-
-        "low_rsi":
-            round(low_rsi, 2),
-
         "current_rsi":
             round(current_rsi, 2),
 
         # Volume structure
-
-        "high_volume":
-            int(high_volume),
-
-        "low_volume":
-            int(low_volume),
-
         "current_volume":
             int(current_volume)
     }
+
+###
+# Calculate HH/HL/LH/LL
+###
+def calculate_zigzag(df, threshold_pct=5.0):
+    """
+    ZigZag based on percentage reversal.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must contain: high, low
+    threshold_pct : float
+        Reversal threshold in percent.
+
+    Returns
+    -------
+    pd.DataFrame
+        index, price, type
+    """
+
+    highs = df["high"].values
+    lows = df["low"].values
+
+    pivots = []
+
+    pivot_idx = 0
+    pivot_price = highs[0]
+
+    trend = None  # up / down
+
+    for i in range(1, len(df)):
+
+        high = highs[i]
+        low = lows[i]
+
+        # Initialization
+        if trend is None:
+
+            up_move = (high - pivot_price) / pivot_price * 100
+            down_move = (pivot_price - low) / pivot_price * 100
+
+            if up_move >= threshold_pct:
+                trend = "up"
+                pivot_idx = i
+                pivot_price = high
+
+            elif down_move >= threshold_pct:
+                trend = "down"
+                pivot_idx = i
+                pivot_price = low
+
+            continue
+
+        # Uptrend
+        if trend == "up":
+
+            # New higher high
+            if high > pivot_price:
+                pivot_idx = i
+                pivot_price = high
+
+            # Reversal
+            reversal = (pivot_price - low) / pivot_price * 100
+
+            if reversal >= threshold_pct:
+                pivots.append(
+                    {
+                        "index": pivot_idx,
+                        "price": pivot_price,
+                        "type": "HIGH"
+                    }
+                )
+
+                trend = "down"
+                pivot_idx = i
+                pivot_price = low
+
+        # Downtrend
+        else:
+
+            # New lower low
+            if low < pivot_price:
+                pivot_idx = i
+                pivot_price = low
+
+            reversal = (high - pivot_price) / pivot_price * 100
+
+            if reversal >= threshold_pct:
+                pivots.append(
+                    {
+                        "index": pivot_idx,
+                        "price": pivot_price,
+                        "type": "LOW"
+                    }
+                )
+
+                trend = "up"
+                pivot_idx = i
+                pivot_price = high
+
+    # Append last pivot
+    if trend == "up":
+        pivots.append(
+            {
+                "index": pivot_idx,
+                "price": pivot_price,
+                "type": "HIGH"
+            }
+        )
+    elif trend == "down":
+        pivots.append(
+            {
+                "index": pivot_idx,
+                "price": pivot_price,
+                "type": "LOW"
+            }
+        )
+
+    return pd.DataFrame(pivots)a
+
+def classify_market_structure(zigzag_df):
+    """
+    Add HH/HL/LH/LL labels.
+    """
+
+    labels = []
+    last_high = None
+    last_low = None
+
+    for _, row in zigzag_df.iterrows():
+
+        if row["type"] == "HIGH":
+
+            if last_high is None:
+                labels.append("HIGH")
+            elif row["price"] > last_high:
+                labels.append("HH")
+            else:
+                labels.append("LH")
+
+            last_high = row["price"]
+
+        else:
+
+            if last_low is None:
+                labels.append("LOW")
+            elif row["price"] > last_low:
+                labels.append("HL")
+            else:
+                labels.append("LL")
+
+            last_low = row["price"]
+
+    result = zigzag_df.copy()
+    result["label"] = labels
+
+    return result
