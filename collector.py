@@ -6,6 +6,9 @@ from datetime import datetime, UTC
 
 from config import *
 
+from rsi_features import ml_divergence
+from rsi_features import calculate_rsi_features
+
 from price_trend_analyzer import calculate_market_structure
 
 from bb_analyzer import BollingerStructureAnalyzer
@@ -67,63 +70,32 @@ for symbol in SYMBOLS:
         df = get_data(symbol, tf)
 
         rsi = ta.rsi(df["close"], length=6)
-        features = calculate_market_structure(
-    df=df,
-    rsi=rsi,
-    lookback=30
-)
+        # Market structure only on 1D
+        if tf == "1d":
+            market_features = calculate_market_structure(
+            df=df,
+            rsi=rsi,
+            lookback=30
+        )
 
-        print(features)
+            print("\n=== 1D Market Structure ===")
+            print(market_features)
 
-        analyzer = BollingerStructureAnalyzer()
 
-        result = analyzer.analyze(df.tail(90))
+        if tf == "4h":
+            analyzer = BollingerStructureAnalyzer()
+            result = analyzer.analyze(df.tail(90))
 
-        print(result)
+            print("\n=== 4H BB Structure ===")
+            print(result)
 
-        bb = ta.bbands(df["close"])
-        bb_upper_col = next(c for c in bb.columns if c.startswith("BBU_"))
-        bb_mid_col   = next(c for c in bb.columns if c.startswith("BBM_"))
-        bb_lower_col = next(c for c in bb.columns if c.startswith("BBL_"))
+        if tf == "1h":
+            ml_rsi = ml_divergence(df["close"], rsi)
 
-        df["rsi"] = rsi
-        df["bb_upper"] = bb[bb_upper_col]
-        df["bb_mid"] = bb[bb_mid_col]
-        df["bb_lower"] = bb[bb_lower_col]
+            print("\n=== 1H RSI Structure ===")
+            print(ml_rsi)   
+            rsi_features = calculate_rsi_features(rsi)
+            print(rsi_features)   
 
-        for index, row in df.iterrows():
-            
-            if pd.isna(row["rsi"]) or pd.isna(row["bb_upper"]):
-                continue
-
-            candle_timestamp = datetime.fromtimestamp(row["time"] / 1000, tz=UTC).isoformat()
-
-            cur.execute("""
-                INSERT INTO snapshots(
-                    timestamp,
-                    symbol,
-                    timeframe,
-                    price,
-                    rsi,
-                    volume,
-                    bb_upper,
-                    bb_mid,
-                    bb_lower
-                )
-                VALUES(?,?,?,?,?,?,?,?,?)
-                """, (
-                    candle_timestamp,
-                    symbol,
-                    tf,
-                    float(row["close"]),
-                    float(row["rsi"]),
-                    float(row["volume"]),
-                    float(row["bb_upper"]),
-                    float(row["bb_mid"]),
-                    float(row["bb_lower"])
-                ))
-
-conn.commit()
-conn.close()
 
 print("Collector finished")
