@@ -285,7 +285,7 @@ def calculate_zigzag(df, threshold_pct=5.0):
             }
         )
 
-    return pd.DataFrame(pivots)a
+    return pd.DataFrame(pivots)
 
 def classify_market_structure(zigzag_df):
     """
